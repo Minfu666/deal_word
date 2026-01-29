@@ -88,6 +88,50 @@ def _compute_totals(rows: list) -> dict:
         '纠错量合计': sum(r.get('纠错量', 0) or 0 for r in rows),
     }
 
+def _sort_rows_for_export(rows: list) -> list:
+    """按组最早日期+姓名+日期排序，保证同名连续以便合并单元格。"""
+    rows = _normalize_rows(rows)
+    items = []
+    for idx, row in enumerate(rows):
+        name = row.get('值班助理', '').strip()
+        date_sort = _parse_date_for_sort(row.get('日期', ''))
+        items.append((idx, name, date_sort, row))
+
+    min_date_map = {}
+    for _, name, date_sort, _ in items:
+        if not name:
+            continue
+        prev = min_date_map.get(name)
+        if prev is None or date_sort < prev:
+            min_date_map[name] = date_sort
+
+    items.sort(key=lambda item: (min_date_map.get(item[1], datetime.max), item[1], item[2], item[0]))
+    return [row for _, _, _, row in items]
+
+def _sort_problem_lines(text: str) -> list:
+    """按日期前缀排序问题行（如 11.05xxx / 11月05日xxx）。"""
+    if not text:
+        return []
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    dated = []
+    others = []
+    for idx, line in enumerate(lines):
+        m = re.search(r'^\s*(\d{1,2})[月./-](\d{1,2})', line)
+        if m:
+            try:
+                dt = datetime(datetime.now().year, int(m.group(1)), int(m.group(2)))
+            except Exception:
+                dt = datetime.max
+            dated.append((dt, idx, line))
+        else:
+            others.append((idx, line))
+    if not dated:
+        return lines
+    dated.sort(key=lambda item: (item[0], item[1]))
+    ordered = [line for _, _, line in dated]
+    ordered.extend([line for _, line in others])
+    return ordered
+
 def parse_single_document(file_path: str) -> list:
     """解析单个Word文档，提取表格数据"""
     doc = Document(file_path)
@@ -200,31 +244,26 @@ def parse_documents(file_paths: list) -> dict:
             unique_rows.append(row)
 
     if pd is None:
-        rows_out = _normalize_rows(unique_rows)
-        name_key = ROW_TEXT_FIELDS[0] if ROW_TEXT_FIELDS else ''
-        date_key = ROW_TEXT_FIELDS[1] if len(ROW_TEXT_FIELDS) > 1 else ''
-        try:
-            rows_out.sort(
-                key=lambda r: (
-                    r.get(name_key, ''),
-                    _parse_date_for_sort(r.get(date_key, ''))
-                )
-            )
-        except Exception:
-            rows_out.sort(key=lambda r: r.get(name_key, ''))
-
+        rows_out = _sort_rows_for_export(unique_rows)
         totals = _compute_totals(rows_out)
 
         merged_problems = ''
-        if all_problems:
-            seen = set()
-            dedup_list = []
-            for p in all_problems:
-                key = re.sub(r'\\s+', '', p)
-                if key and key not in seen:
-                    seen.add(key)
-                    dedup_list.append(p)
-            merged_problems = '\\n'.join(dedup_list)
+        if rows_out:
+            problem_items = []
+            for idx, row in enumerate(rows_out):
+                problem = extract_problems(row.get('督导检查情况', ''))
+                if problem:
+                    problem_items.append((_parse_date_for_sort(row.get('日期', '')), idx, problem.strip()))
+            if problem_items:
+                problem_items.sort(key=lambda item: (item[0], item[1]))
+                seen = set()
+                dedup_list = []
+                for _, __, p in problem_items:
+                    key = re.sub(r'\\s+', '', p)
+                    if key and key not in seen:
+                        seen.add(key)
+                        dedup_list.append(p)
+                merged_problems = '\\n'.join(dedup_list)
 
         return {
             'rows': rows_out,
@@ -252,20 +291,27 @@ def parse_documents(file_paths: list) -> dict:
     df = df.sort_values(['__min_date__', '值班助理', '__date_sort__'], ascending=[True, True, True], kind='mergesort')
     df = df.drop(columns=['__date_sort__', '__min_date__'])
 
-    rows_out = _normalize_rows(df.to_dict('records'))
+    rows_out = _sort_rows_for_export(df.to_dict('records'))
     totals = _compute_totals(rows_out)
 
-    # 督导检查情况文本去重并合并
+    # 督导检查情况按排序后的行进行聚合，确保日期顺序稳定
     merged_problems = ''
-    if all_problems:
-        seen = set()
-        dedup_list = []
-        for p in all_problems:
-            key = re.sub(r'\s+', '', p)
-            if key and key not in seen:
-                seen.add(key)
-                dedup_list.append(p)
-        merged_problems = '\n'.join(dedup_list)
+    if rows_out:
+        problem_items = []
+        for idx, row in enumerate(rows_out):
+            problem = extract_problems(row.get('督导检查情况', ''))
+            if problem:
+                problem_items.append((_parse_date_for_sort(row.get('日期', '')), idx, problem.strip()))
+        if problem_items:
+            problem_items.sort(key=lambda item: (item[0], item[1]))
+            seen = set()
+            dedup_list = []
+            for _, __, p in problem_items:
+                key = re.sub(r'\s+', '', p)
+                if key and key not in seen:
+                    seen.add(key)
+                    dedup_list.append(p)
+            merged_problems = '\n'.join(dedup_list)
 
     return {
         'rows': rows_out,
@@ -299,7 +345,7 @@ def export_document(data: dict) -> str:
         raise FileNotFoundError('未找到模板文件：图书管理岗督导工作情况通报(模板).docx')
     doc = Document(template_path)
 
-    rows = _normalize_rows(data.get('rows', []))
+    rows = _sort_rows_for_export(data.get('rows', []))
     totals = _compute_totals(rows)
     problems = str(data.get('problems') or '').strip()
     if problems:
@@ -382,7 +428,7 @@ def export_document(data: dict) -> str:
         run4.bold = True
 
         if problems:
-            prob_list = problems.split('\n')
+            prob_list = _sort_problem_lines(problems)
             for idx, prob in enumerate(prob_list, 1):
                 if prob.strip():
                     clean_prob = re.sub(r'^(?:[1-9]|[一二三四五六七八九十])[、.]\s*', '', prob.strip())
