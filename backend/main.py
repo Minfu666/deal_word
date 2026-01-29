@@ -1,6 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from typing import List
 import tempfile
 import os
@@ -9,6 +11,9 @@ try:
     from .doc_processor import parse_documents, export_document
 except ImportError:
     from doc_processor import parse_documents, export_document
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
 
 app = FastAPI(title="图书管理督导工作汇总系统")
 
@@ -19,8 +24,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if FRONTEND_DIST.exists():
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
 @app.get("/", include_in_schema=False)
 async def root():
+    index_path = FRONTEND_DIST / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
     return RedirectResponse(url="/docs")
 
 ALLOWED_CONTENT_TYPES = {
@@ -97,6 +110,17 @@ async def export_file(data: dict, background_tasks: BackgroundTasks):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         background=background_tasks,
     )
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str):
+    if FRONTEND_DIST.exists():
+        file_path = FRONTEND_DIST / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        index_path = FRONTEND_DIST / "index.html"
+        if index_path.exists():
+            return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="Not Found")
 
 if __name__ == "__main__":
     import uvicorn
