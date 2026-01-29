@@ -272,12 +272,31 @@ def parse_documents(file_paths: list) -> dict:
         'problems': merged_problems
     }
 
+def _resolve_template_path() -> str:
+    """优先使用后端目录中的模板，避免部署时找不到根目录模板。"""
+    env_path = os.getenv('TEMPLATE_PATH')
+    candidates = []
+    if env_path:
+        candidates.append(env_path)
+    # backend/templates/...
+    backend_dir = os.path.dirname(__file__)
+    candidates.append(os.path.join(backend_dir, 'templates', '图书管理岗督导工作情况通报(模板).docx'))
+    # repo root fallback
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    candidates.append(os.path.join(root_dir, '图书管理岗督导工作情况通报(模板).docx'))
+
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return ''
+
 def export_document(data: dict) -> str:
     """导出汇总文档"""
     # 使用模板文档
-    root_dir = os.path.dirname(os.path.dirname(__file__))
-    template_path = os.path.join(root_dir, '图书管理岗督导工作情况通报(模板).docx')
-    doc = Document(template_path) if os.path.exists(template_path) else Document()
+    template_path = _resolve_template_path()
+    if not template_path:
+        raise FileNotFoundError('未找到模板文件：图书管理岗督导工作情况通报(模板).docx')
+    doc = Document(template_path)
 
     rows = _normalize_rows(data.get('rows', []))
     totals = _compute_totals(rows)
