@@ -18,11 +18,12 @@
    - 保存后重新部署（Redeploy）
 
 ### 3. 入口与环境变量（建议方案）
-Zeabur 会自动识别 `main.py`。如需手动指定入口，可按下述设置：
+Zeabur 会自动识别 `main.py`。本项目在 `backend/` 下提供 `zbpack.json` 强制识别为 Python。
+如需手动指定入口，可按下述设置：
 
 - 环境变量（任一方式即可）：
-  - `ZBPACK_PYTHON_ENTRY=backend/__init__.py`
-  - 或 `ZBPACK_PYTHON_ENTRY=backend/main.py`
+  - `ZBPACK_PYTHON_ENTRY=__init__.py`
+  - 或 `ZBPACK_PYTHON_ENTRY=main.py`
 
 可选：指定 Python 版本（如需）
 - `ZBPACK_PYTHON_VERSION=3.10`
