@@ -4,7 +4,10 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-import pandas as pd
+try:
+    import pandas as pd
+except Exception:
+    pd = None
 import tempfile
 import re
 import os
@@ -195,6 +198,39 @@ def parse_documents(file_paths: list) -> dict:
         if key not in seen_records:
             seen_records.add(key)
             unique_rows.append(row)
+
+    if pd is None:
+        rows_out = _normalize_rows(unique_rows)
+        name_key = ROW_TEXT_FIELDS[0] if ROW_TEXT_FIELDS else ''
+        date_key = ROW_TEXT_FIELDS[1] if len(ROW_TEXT_FIELDS) > 1 else ''
+        try:
+            rows_out.sort(
+                key=lambda r: (
+                    r.get(name_key, ''),
+                    _parse_date_for_sort(r.get(date_key, ''))
+                )
+            )
+        except Exception:
+            rows_out.sort(key=lambda r: r.get(name_key, ''))
+
+        totals = _compute_totals(rows_out)
+
+        merged_problems = ''
+        if all_problems:
+            seen = set()
+            dedup_list = []
+            for p in all_problems:
+                key = re.sub(r'\\s+', '', p)
+                if key and key not in seen:
+                    seen.add(key)
+                    dedup_list.append(p)
+            merged_problems = '\\n'.join(dedup_list)
+
+        return {
+            'rows': rows_out,
+            'totals': totals,
+            'problems': merged_problems
+        }
     
     # 转为DataFrame进行排序与字段清洗
     df = pd.DataFrame(unique_rows)

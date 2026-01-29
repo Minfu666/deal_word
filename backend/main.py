@@ -5,7 +5,10 @@ from typing import List
 import tempfile
 import os
 import uuid
-from doc_processor import parse_documents, export_document
+try:
+    from .doc_processor import parse_documents, export_document
+except ImportError:
+    from doc_processor import parse_documents, export_document
 
 app = FastAPI(title="图书管理督导工作汇总系统")
 
