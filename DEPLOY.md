@@ -38,7 +38,7 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 ### 5. 获取后端访问地址
 部署完成后，在 Zeabur 的服务页面可看到访问域名，例如：
 ```
-https://your-backend.zeabur.app
+https://deal-word.zeabur.app
 ```
 该地址将用于前端的 `VITE_API_URL`。
 
@@ -50,7 +50,7 @@ https://your-backend.zeabur.app
 前端构建时需要注入以下变量：
 
 - `VITE_API_URL`：后端 Zeabur 地址  
-  例：`https://your-backend.zeabur.app`
+  例：`https://deal-word.zeabur.app`
 
 - `VITE_BASE`：GitHub Pages 子路径  
   例：`/你的仓库名/`  
@@ -63,8 +63,8 @@ https://your-backend.zeabur.app
 ### 3. 推荐：GitHub Actions 自动部署
 使用 Actions 时，在工作流中设置构建环境变量（示例）：
 ```
-VITE_API_URL=https://your-backend.zeabur.app
-VITE_BASE=/your-repo/
+VITE_API_URL=https://deal-word.zeabur.app
+VITE_BASE=/deal_word/
 ```
 
 构建命令：
@@ -84,9 +84,9 @@ Vite 会输出到 `dist/`，GitHub Pages 将发布该目录。
 ### 2. 页面资源 404
 检查 `VITE_BASE` 是否与 GitHub Pages 的仓库名一致，例如：
 ```
-https://<username>.github.io/<repo-name>/
+https://minfu666.github.io/deal_word/
 ```
-对应 `VITE_BASE=/repo-name/`。
+对应 `VITE_BASE=/deal_word/`。
 
 ---
 
@@ -101,6 +101,6 @@ ZBPACK_PYTHON_VERSION=3.10
 
 ### GitHub Pages（前端构建）
 ```
-VITE_API_URL=https://your-backend.zeabur.app
-VITE_BASE=/your-repo/
+VITE_API_URL=https://deal-word.zeabur.app
+VITE_BASE=/deal_word/
 ```

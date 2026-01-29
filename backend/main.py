@@ -17,9 +17,14 @@ FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
 
 app = FastAPI(title="图书管理督导工作汇总系统")
 
+def _parse_origins(value: str) -> List[str]:
+    return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
+
+origins = _parse_origins(os.getenv("FRONTEND_ORIGINS", ""))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -34,6 +39,9 @@ async def root():
     index_path = FRONTEND_DIST / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
+    frontend_url = os.getenv("FRONTEND_URL", "").strip() or "https://minfu666.github.io/deal_word"
+    if frontend_url:
+        return RedirectResponse(url=frontend_url)
     return RedirectResponse(url="/docs")
 
 ALLOWED_CONTENT_TYPES = {
