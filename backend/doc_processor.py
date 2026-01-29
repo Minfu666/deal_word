@@ -243,13 +243,14 @@ def parse_documents(file_paths: list) -> dict:
             df[col] = 0
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
 
-    # 构造排序辅助列，按姓名 + 日期排序
+    # 构造排序辅助列：按每个人最早日期分组排序，组内再按日期排序
     try:
         df['__date_sort__'] = df['日期'].apply(_parse_date_for_sort)
     except Exception:
         df['__date_sort__'] = datetime.max
-    df = df.sort_values(['值班助理', '__date_sort__'], ascending=[True, True], kind='mergesort')
-    df = df.drop(columns=['__date_sort__'])
+    df['__min_date__'] = df.groupby('值班助理')['__date_sort__'].transform('min')
+    df = df.sort_values(['__min_date__', '值班助理', '__date_sort__'], ascending=[True, True, True], kind='mergesort')
+    df = df.drop(columns=['__date_sort__', '__min_date__'])
 
     rows_out = _normalize_rows(df.to_dict('records'))
     totals = _compute_totals(rows_out)
@@ -301,6 +302,8 @@ def export_document(data: dict) -> str:
     rows = _normalize_rows(data.get('rows', []))
     totals = _compute_totals(rows)
     problems = str(data.get('problems') or '').strip()
+    if problems:
+        problems = problems.replace('\r\n', '\n').replace('\\r\\n', '\n').replace('\\n', '\n')
 
     if not rows:
         return None
@@ -441,6 +444,7 @@ def export_document(data: dict) -> str:
     # 设置全局字体、行高与对齐方式
     data_row_start = 1
     data_row_end = len(rows)
+    note_row_idx = len(rows) + 2
     for row_idx, row in enumerate(table.rows):
         is_data_row = data_row_start <= row_idx <= data_row_end
         # 数据行最小高度 1.71cm，允许督导检查情况扩展
@@ -454,8 +458,11 @@ def export_document(data: dict) -> str:
         for col_idx, cell in enumerate(row.cells):
             is_left_block = col_idx <= 7
             is_supervisor_cell = is_data_row and col_idx >= 8
+            is_note_content_cell = row_idx == note_row_idx and col_idx == 1
 
-            if is_left_block:
+            if is_note_content_cell:
+                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            elif is_left_block:
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             elif is_supervisor_cell:
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
@@ -463,7 +470,9 @@ def export_document(data: dict) -> str:
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
 
             for paragraph in cell.paragraphs:
-                if is_left_block:
+                if is_note_content_cell:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                elif is_left_block:
                     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 elif is_supervisor_cell:
                     paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
